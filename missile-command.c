@@ -14,11 +14,11 @@
 #define WIDTH 100
 
 // colors
-#define GRASS_PAIR     1
-#define LAUNCHER_PAIR    4
-#define HOUSE_PAIR 5
-#define EXPLOSION_PAIR 6
-#define BACKGROUND_PAIR 7
+#define GRASS_PAIR 1
+#define LAUNCHER_PAIR 2
+#define HOUSE_PAIR 3
+#define EXPLOSION_PAIR 4
+#define BACKGROUND_PAIR 5
 
 // max missiles
 #define MAX_MISSILES 10
@@ -629,7 +629,7 @@ void next_wave()
                     init_missiles();
                     missile_count = 0;
                     clear();
-                    //
+                    // update wave params
                     missiles_per_wave *= MISSILES_WAVE_MODIFIER;
                     game_speed /= GAME_SPEED_WAVE_MODIFIER; 
                     launch_chance /= LAUNCH_CHANCE_WAVE_MODIFIER;
