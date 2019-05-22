@@ -114,7 +114,7 @@ int main()
 	cbreak();	//line buffering disabled. pass on everything
     clear(); // clear the screen
     wresize(stdscr, HEIGHT_w, WIDTH_w);
-    WINDOW * win = newwin(HEIGHT,WIDTH,1,1); // creates window
+    WINDOW * win = newwin(HEIGHT,WIDTH,1,1); // creates game window
 
     curs_set(0); // invisible cursor
 
