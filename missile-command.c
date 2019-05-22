@@ -15,9 +15,6 @@
 
 // colors
 #define GRASS_PAIR     1
-#define EMPTY_PAIR     1
-#define WATER_PAIR     2
-#define MOUNTAIN_PAIR  3
 #define LAUNCHER_PAIR    4
 #define HOUSE_PAIR 5
 #define EXPLOSION_PAIR 6
@@ -59,21 +56,21 @@ struct missile
     int target_x;
     int target_y;
     bool path[HEIGHT][WIDTH];
-    bool spawned;
+    bool launched;
 };
 // two types of missiles (enemy and player)
 struct missile missiles[2][MAX_MISSILES];
 
 // game variables
 int score = 0;
-int spawned_missiles;
+int launched_missiles;
 int missile_count = 0;
 int missiles_per_wave = MISSILES_PER_WAVE;
 int game_speed = GAME_SPEED;
 int launch_chance = LAUNCH_CHANCE;
 int missile_divide_chance = MISSILE_DIVIDE_CHANCE;
 int friendly_missiles = PLAYER_MISSILE_AMOUNT;
-bool freeze_explosion = true;
+bool freeze_explosion = true; 
 int cities_remaining;
 // missile launchers (2 launchers)
 bool launcher_exists[2] ={false,false};
@@ -97,51 +94,61 @@ void checkforhit(int type);
 bool path_collition(int y,int x,int missile_no,int type);
 void resetpath(int type,int i);
 void destroy_missile(int missile_no,int type);
+// menu functions
+void game_start();
 void next_wave();
 void game_over();
 
 int main()
 {
-
-
-	/* Initialize curses */
-	initscr();
-	clear();
-	noecho();
-	cbreak();	//Line buffering disabled. pass on everything
-    wresize(stdscr, HEIGHT_w, WIDTH_w);
-    WINDOW * win = newwin(HEIGHT,WIDTH,1,1); // creates window
-    // Enables keypad mode. This makes (at least for me) mouse events getting
-    // reported as KEY_MOUSE, instead as of random letters.
-    keypad(win, TRUE);
-    keypad(stdscr, TRUE);
-    start_color();
-    init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(WATER_PAIR, COLOR_CYAN, COLOR_BLACK);
-    init_pair(MOUNTAIN_PAIR, COLOR_WHITE, COLOR_BLACK);
-    init_pair(LAUNCHER_PAIR, COLOR_RED, COLOR_BLACK);
-    init_pair(EXPLOSION_PAIR, COLOR_RED, COLOR_BLACK);
-    init_pair(HOUSE_PAIR, COLOR_WHITE, COLOR_BLACK);
-    init_pair(BACKGROUND_PAIR, COLOR_BLACK, COLOR_WHITE);
-    wbkgd(stdscr, COLOR_PAIR(BACKGROUND_PAIR));
-    curs_set(0);
-    refresh();
-    srand(time(NULL));   // Initialization, should only be called once.
-
-    init_missiles();
-    initmap();
-    get_launcher_positions();
-    wrefresh(win);
-    launch_missile(0,0,MISSILE_ENEMY);
-    mouseinterval(1);
-    timeout(1);
-    wtimeout(win,1);
+    srand(time(NULL));   // Initialization for random numbers
+    // clocks    
     clock_t start_time = clock();
     clock_t explosion_timer = clock();
     clock_t start_time_player = clock();
     clock_t start_refresh_rate = clock();
+
+	/* Initialize curses */
+	initscr(); // initiate ncurses
+	noecho(); // dont echo input
+	cbreak();	//line buffering disabled. pass on everything
+    clear(); // clear the screen
+    wresize(stdscr, HEIGHT_w, WIDTH_w);
+    WINDOW * win = newwin(HEIGHT,WIDTH,1,1); // creates window
+
+    curs_set(0); // invisible cursor
+
+    // reports input as KEY_MOUSE
+    keypad(win, TRUE);
+    keypad(stdscr, TRUE);
+
+    // add colors
+    start_color();
+    init_pair(GRASS_PAIR, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(LAUNCHER_PAIR, COLOR_RED, COLOR_BLACK);
+    init_pair(EXPLOSION_PAIR, COLOR_RED, COLOR_BLACK);
+    init_pair(HOUSE_PAIR, COLOR_WHITE, COLOR_BLACK);
+    init_pair(BACKGROUND_PAIR, COLOR_BLACK, COLOR_WHITE);
+    //set bg color for the main screen(the border around the game)
+    wbkgd(stdscr, COLOR_PAIR(BACKGROUND_PAIR));
+
+    // game init
+    refresh();
+    init_missiles();
+    initmap();
+    get_launcher_positions();
+    wtimeout(win,1);
+    wrefresh(win);
+
+    // input init
+    mouseinterval(1);
+    timeout(1);
     MEVENT event;
     mousemask( ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+
+    // start game
+    game_start();
+    launch_missile(0,0,MISSILE_ENEMY); // start with a missile :)
     while(1)
     {
         if(clock()-game_speed>start_time)
@@ -156,7 +163,7 @@ int main()
         if(clock()-EXPLOSION_DELAY>explosion_timer)
         {
             explosion_timer = clock();
-            freeze_explosion=false;
+            freeze_explosion=false; // @ (explosion ch) are not cleared from the screen if true
         }
         if(clock()-PLAYER_MISSILE_SPEED>start_time_player)
         {
@@ -211,6 +218,30 @@ int main()
     }
     return 0;
 }
+// loads map into the array
+void initmap()
+{
+    for(int i = 0;i<HEIGHT-4;i++)
+    {
+        for(int a =0;a<WIDTH;a++)
+        {
+            map[i][a] = ' ';
+        }
+    }
+    FILE *fp;
+    fp = fopen("map.txt", "r");
+    for(int i = HEIGHT-4;i<HEIGHT;i++)
+    {
+        for(int a =0;a<WIDTH;a++)
+        {
+            char ch = getc(fp); 
+            if(ch=='\n') ch = getc(fp); 
+            map[i][a] = ch;
+        }
+    }
+    fclose(fp);
+}
+// prints the map
 void printmap(WINDOW *win)
 {
     launcher_exists[0] = false;
@@ -266,19 +297,21 @@ void printmap(WINDOW *win)
     if(launcher_exists[0]==false) missiles_left[0]=0;
     else if(launcher_exists[1]==false) missiles_left[1]=0;
 }
+// sets missile launch status to false
 void init_missiles()
 {
     for(int i = 0;i< MAX_MISSILES;i++)
     {
-        missiles[MISSILE_ENEMY][i].spawned = false;
-        missiles[MISSILE_PLAYER][i].spawned = false;
+        missiles[MISSILE_ENEMY][i].launched = false;
+        missiles[MISSILE_PLAYER][i].launched = false;
     }
 }
+// launch a missile
 void launch_missile(int y,int x,int type)
 {
     for(int i = 0;i< MAX_MISSILES; i++)
     {
-        if(missiles[type][i].spawned == false) 
+        if(missiles[type][i].launched == false) 
             {
                 resetpath(type,i);
                 if(type==MISSILE_ENEMY)
@@ -336,20 +369,21 @@ void launch_missile(int y,int x,int type)
                     missiles[MISSILE_PLAYER][i].target_y = y;
                 }
 
-                missiles[type][i].spawned = true;
+                missiles[type][i].launched = true;
                 missiles[type][i].xpos = missiles[type][i].spawn_x;
                 missiles[type][i].ypos = missiles[type][i].spawn_y;
                 break;
             }
     }
 }
+// Missile movement, impact detection
 void updatemissiles(int type)
 {
     if(type==MISSILE_ENEMY)
     {
         for(int i = 0;i< MAX_MISSILES; i++)
         {
-            if(missiles[MISSILE_ENEMY][i].spawned == true) 
+            if(missiles[MISSILE_ENEMY][i].launched == true) 
             {
                 
                 if (missiles[MISSILE_ENEMY][i].xpos < missiles[MISSILE_ENEMY][i].target_x)
@@ -386,7 +420,7 @@ void updatemissiles(int type)
     {
         for(int i = 0;i< MAX_MISSILES; i++)
         {
-            if(missiles[MISSILE_PLAYER][i].spawned == true) 
+            if(missiles[MISSILE_PLAYER][i].launched == true) 
             {
                 if (missiles[MISSILE_PLAYER][i].xpos < missiles[MISSILE_PLAYER][i].target_x)
                     missiles[MISSILE_PLAYER][i].xpos++;
@@ -411,16 +445,17 @@ void updatemissiles(int type)
     }
 
 }
-
+// checks whether missile trails collide (to prevent deletion of another missile's trail after explosion)
 bool path_collition(int y,int x,int missile_no,int type)
 {
     for(int i = 0;i<MAX_MISSILES;i++)
     {
-        if(missiles[type][i].spawned == true && missiles[type][i].path[y][x] == true && missile_no!=i)
+        if(missiles[type][i].launched == true && missiles[type][i].path[y][x] == true && missile_no!=i)
             return true;
     }
     return false;
 }
+// destroys missile, sets destroyed area to @, clears the trail
 void destroy_missile(int missile_no, int type)
 {
     freeze_explosion=true;
@@ -432,7 +467,7 @@ void destroy_missile(int missile_no, int type)
                 map[y][x] = ' ';
         }
     }
-    missiles[type][missile_no].spawned = false;
+    missiles[type][missile_no].launched = false;
     resetpath(type,missile_no);
     map[missiles[type][missile_no].ypos][missiles[type][missile_no].xpos] = '@';
     map[missiles[type][missile_no].ypos-1][missiles[type][missile_no].xpos] = '@';
@@ -441,6 +476,7 @@ void destroy_missile(int missile_no, int type)
     map[missiles[type][missile_no].ypos-1][missiles[type][missile_no].xpos-1] = '@';
     map[missiles[type][missile_no].ypos-1][missiles[type][missile_no].xpos+1] = '@';
 }
+// gets launcher positions (y is currently unused)
 void get_launcher_positions()
 {
     for(int y = 0;y < HEIGHT; y++)
@@ -465,21 +501,23 @@ void get_launcher_positions()
         }
     }
 }
+// checks whether a missile has hit anything
 void checkforhit(int type)
 {
 
     for(int i = 0;i< MAX_MISSILES; i++)
     {
-        if(missiles[type][i].spawned == true) 
+        if(missiles[type][i].launched == true) 
         {
             if (map[missiles[type][i].ypos][missiles[type][i].xpos] == '=' || map[missiles[type][i].ypos][missiles[type][i].xpos] == '#' || map[missiles[type][i].ypos][missiles[type][i].xpos] == '^' || map[missiles[type][i].ypos][missiles[type][i].xpos] == '@' )
             {
-                destroy_missile(i,type);\
+                destroy_missile(i,type);
                 score++;
             }
         }
     }
 }
+// resets missile path 
 void resetpath(int type,int i)
 {
     for(int y = 0; y<HEIGHT;y++)
@@ -488,6 +526,40 @@ void resetpath(int type,int i)
             missiles[type][i].path[y][x] = false;
         }
 }
+// game start screen
+void game_start()
+{
+    attron(COLOR_PAIR(HOUSE_PAIR));
+    MEVENT event;
+    mousemask( ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+    char name_msg[]="Missile Command";  
+    char description_msg[]="Defend 6 cities by destroying enemy missiles";
+    char cities_msg[]="= = = = = =";  
+    char start_game_msg[]="-->START GAME<--";  
+    while(1)
+    {
+        refresh();
+        int x,y ;            // to store where you are
+        mvprintw(HEIGHT/2,WIDTH/2-strlen(name_msg)/2,"%s",name_msg);
+        mvprintw(HEIGHT/2+1,WIDTH/2-strlen(description_msg)/2,"%s",description_msg);
+        mvprintw(HEIGHT/2+2,WIDTH/2-strlen(cities_msg)/2,"%s",cities_msg);
+        mvprintw(HEIGHT/2+3,WIDTH/2-strlen(start_game_msg)/2,"%s",start_game_msg);
+        int c = getch(); 
+        if(getmouse(&event) == OK) 
+        { 
+            if(event.bstate & BUTTON1_PRESSED)
+            {
+                if(event.y = HEIGHT/2+3 && event.x>WIDTH/2-5 && event.x<WIDTH/2+15)
+                {
+                    attroff(COLOR_PAIR(HOUSE_PAIR));
+                    break;
+                }
+            }
+        }
+        usleep(10);
+    }
+}
+// game over screen
 void game_over()
 {
     attron(COLOR_PAIR(HOUSE_PAIR));
@@ -499,9 +571,8 @@ void game_over()
     while(1)
     {
         refresh();
-        int x,y ;            // to store where you are
         mvprintw(HEIGHT/2,WIDTH/2-strlen(game_over_msg)/2,"%s",game_over_msg);
-        mvprintw(HEIGHT/2+1,WIDTH/2-strlen(score_msg)/2-3,"%s%d",score_msg,score);
+        mvprintw(HEIGHT/2+1,WIDTH/2-strlen(score_msg)/2-2,"%s%d",score_msg,score);
         mvprintw(HEIGHT/2+2,WIDTH/2-strlen(exit_game_msg)/2,"%s",exit_game_msg);
         int c = getch(); 
         if(getmouse(&event) == OK) 
@@ -519,6 +590,7 @@ void game_over()
         usleep(10);
     }
 }
+// next wave screen. Counts score, updates params for next wave
 void next_wave()
 {
     attron(COLOR_PAIR(HOUSE_PAIR));
@@ -572,38 +644,13 @@ void next_wave()
         usleep(10);
     }
 }
-void initmap()
-{
-    for(int i = 0;i<HEIGHT-4;i++)
-    {
-        for(int a =0;a<WIDTH;a++)
-        {
-            map[i][a] = ' ';
-        }
-    }
-    FILE *fp;
-    fp = fopen("map.txt", "r");
-    for(int i = HEIGHT-4;i<HEIGHT;i++)
-    {
-        for(int a =0;a<WIDTH;a++)
-        {
-            char ch = getc(fp); 
-            if(ch=='\n') ch = getc(fp); 
-            map[i][a] = ch;
-        }
-    }
-    fclose(fp);
-}
+// true if enemy missiles in the air
 bool missiles_in_air()
 {
     for(int i = 0;i<MAX_MISSILES;i++)
     {
-        if(missiles[MISSILE_ENEMY][i].spawned == true)
+        if(missiles[MISSILE_ENEMY][i].launched == true)
          return true;
     }
     return false;
-}
-void start_screen()
-{
-
 }
